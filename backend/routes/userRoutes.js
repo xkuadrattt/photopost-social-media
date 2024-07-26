@@ -3,59 +3,8 @@ const express = require("express");
 const router = express.Router();
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcrypt");
-const multer = require("multer");
 const prisma = new PrismaClient();
-const path = require("path");
-const fs = require("fs");
-
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, "uploads/");
-  },
-  filename: function (req, file, cb) {
-    cb(null, Date.now() + path.extname(file.originalname));
-  },
-});
-
-const fileFilter = (req, file, cb) => {
-  const fileType = /jpeg|jpg|png|gif|webp/;
-  const extName = fileType.test(path.extname(file.originalname).toLowerCase());
-  const mimeType = fileType.test(file.mimetype);
-
-  if (mimeType && extName) {
-    return cb(null, true);
-  } else {
-    cb(new Error("file not supported"));
-  }
-};
-
-const upload = multer({
-  storage: storage,
-  limits: { fileSize: 5000000 },
-  fileFilter: fileFilter,
-});
-
-router.post("/upload", (req, res, next) => {
-  const uploadHandler = upload.single("image");
-
-  uploadHandler(req, res, function (err) {
-    if (err instanceof multer.MulterError) {
-      // Kesalahan karena batas ukuran file
-      if (err.code === "LIMIT_FILE_SIZE") {
-        return res
-          .status(413)
-          .json({ error: "File size exceeds the limit of 1MB" });
-      }
-      // Kesalahan multer lainnya
-      return res.status(400).json({ error: err.message });
-    } else if (err) {
-      // Kesalahan umum lainnya
-      return res.status(400).json({ error: err.message });
-    }
-    // Jika tidak ada kesalahan, lanjutkan dengan proses berikutnya
-    res.json({ file: req.file });
-  });
-});
+const upload = require("../middleware/upload.js");
 
 const authToken = (req, res, next) => {
   const authHeader = req.headers["authorization"];
@@ -75,6 +24,20 @@ const authToken = (req, res, next) => {
     next();
   });
 };
+
+router.post("/status", authToken, upload.single("image"), async (req, res) => {
+  const userId = req.user.id;
+  const imageUrl = req.file ? `/uploads/${userId}/${req.file.filename}` : null;
+
+  try {
+    const status = await prisma.status.create({
+      data: { content, imageUrl, userId },
+    });
+    res.status(200).json(status);
+  } catch (error) {
+    res.status(500).json({ error: "error creating status" });
+  }
+});
 
 router.post("/register", async (req, res) => {
   const { name, email, password } = req.body;
@@ -105,11 +68,35 @@ router.post("/login", async (req, res) => {
   const accessToken = jwt.sign(
     { id: user.id, email: user.email },
     process.env.ACCESS_TOKEN_SECRET,
-    { expiresIn: "1h" }
+    { expiresIn: "1h" },
   );
 
   res.json({ accessToken });
 });
+
+router.put(
+  "/users/:id/avatar",
+  authToken,
+  upload.single("avatar"),
+  async (req, res) => {
+    const userId = req.params.id;
+    const fileUrl = `/uploads/${req.user.id}/${req.file.filename}`;
+
+    try {
+      await prisma.user.update({
+        where: { id: userId },
+        data: {
+          profile_image_url: fileUrl,
+        },
+      });
+      res
+        .status(200)
+        .json({ message: "avatar updated successfully", avatarUrl: fileUrl });
+    } catch (err) {
+      res.status(500).json({ err: "an error occured" });
+    }
+  },
+);
 
 router.get("/users", authToken, async (req, res) => {
   const users = await prisma.user.findMany();
