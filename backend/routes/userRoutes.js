@@ -42,6 +42,12 @@ router.post("/status", authToken, upload.single("image"), async (req, res) => {
 router.post("/register", async (req, res) => {
   const { name, email, password } = req.body;
   try {
+    const existingUser = await prisma.user.findUnique({ where: { email } });
+
+    if (existingUser) {
+      return res.status(400).json({ message: "email already register" });
+    }
+
     const hashPassword = await bcrypt.hash(password, 10);
     const user = await prisma.user.create({
       data: {
@@ -68,7 +74,7 @@ router.post("/login", async (req, res) => {
   const accessToken = jwt.sign(
     { id: user.id, email: user.email },
     process.env.ACCESS_TOKEN_SECRET,
-    { expiresIn: "1h" },
+    { expiresIn: "1h" }
   );
 
   res.json({ accessToken });
@@ -95,7 +101,7 @@ router.put(
     } catch (err) {
       res.status(500).json({ err: "an error occured" });
     }
-  },
+  }
 );
 
 router.get("/users", authToken, async (req, res) => {
