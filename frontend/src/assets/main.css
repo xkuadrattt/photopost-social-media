@@ -25,3 +25,11 @@
 .label-control {
   @apply block mb-2 text-sm font-medium text-gray-900;
 }
+
+.border-tertiary {
+  @apply border border-fuchsia-300 hover:bg-fuchsia-400 w-full sm:w-max px-4 py-2 rounded-lg;
+}
+
+.reset-flex {
+  flex: 0 0 auto;
+}
